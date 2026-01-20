@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapEditor v.1.1.0</title>
+    <style>
+        /* --- ПЕРЕМЕННЫЕ И ОСНОВА --- */
+        :root {
+            --bg-app: #f5f5f7;
+            --bg-panel: rgba(255, 255, 255, 0.82);
+            --bg-input: #ffffff;
+            --primary: #2c3e50;
+            --accent: #e67e22;
+            --border: rgba(0, 0, 0, 0.06);
+            --text-main: #1d1d1f;
+            --text-dim: #86868b;
+            --shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+            --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-mono: "SF Mono", "Fira Code", monospace;
+        }
+
+        * { box-sizing: border-box; }
+
+        body, html {
+            margin: 0; padding: 0;
+            height: 100vh; overflow: hidden;
+            background-color: var(--bg-app);
+            color: var(--text-main);
+            font-family: var(--font-ui);
+            font-size: 13px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        /* --- ВЕРХНЯЯ ПАНЕЛЬ --- */
+         .toolbar {
+            height: 64px;
+            background: var(--primary);
+            color: white;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+
+        .brand { font-weight: 800; font-size: 18px; letter-spacing: 0.5px; display: flex; align-items: center; }
+        .brand-icon { color: var(--accent); margin-right: 12px; font-size: 24px; }
+        .version { font-size: 10px; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; margin-left: 10px; opacity: 0.6; font-weight: normal; }
+
+        .toolbar-center { display: flex; gap: 16px; align-items: center; }
+
+        .map-modes { display: flex; background: #f0f0f2; padding: 4px; border-radius: 10px; gap: 2px; }
+        .mode-btn {
+            border: none; background: transparent; color: var(--text-dim); padding: 6px 14px;
+            border-radius: 7px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 11px;
+        }
+        .mode-btn:hover { color: var(--primary); }
+        .mode-btn.active { background: white; color: var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+        .tools-panel { display: flex; gap: 4px; background: #f0f0f2; padding: 4px; border-radius: 10px; }
+        .tool-btn {
+            border: none; background: transparent; padding: 6px 12px; border-radius: 7px;
+            cursor: pointer; font-weight: 600; color: var(--text-dim); display: flex; align-items: center;
+            gap: 6px; transition: all 0.2s; font-size: 11px;
+        }
+        .tool-btn:hover { color: var(--primary); }
+        .tool-btn.active { background: var(--primary); color: white; }
+
+        .system-actions { display: flex; gap: 6px; }
+        .system-actions button {
+            background: #f0f0f2; border: none; color: var(--primary); padding: 8px 14px;
+            border-radius: 8px; cursor: pointer; transition: 0.2s; font-weight: 700; font-size: 11px;
+        }
+        .system-actions button:hover { background: #e5e5e7; }
+        .create-btn { background: var(--accent) !important; color: white !important; }
+
+        /* --- РАБОЧАЯ ОБЛАСТЬ --- */
+        .main-workspace { flex: 1; display: flex; overflow: hidden; position: relative; }
+        .canvas-wrapper { flex: 1; position: relative; background-color: #e3e3dc; overflow: hidden; }
+        #mapCanvas { display: block; outline: none; }
+
+        /* --- ПЛАВАЮЩИЕ ПАНЕЛИ (GLASS) --- */
+        .floating-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px) saturate(180%);
+            -webkit-backdrop-filter: blur(12px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+            pointer-events: auto;
+        }
+
+        .legend-container {
+            position: absolute; top: 16px; left: 16px;
+            display: flex; flex-direction: column; gap: 12px;
+            z-index: 60; pointer-events: none;
+        }
+        .legend-panel { width: 210px; padding: 16px; max-height: 40vh; overflow-y: auto; }
+        .legend-title {
+            font-weight: 800; font-size: 9px; margin-bottom: 12px; color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 8px;
+        }
+        .legend-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+        .legend-item { display: flex; align-items: center; margin-bottom: 8px; font-size: 11px; font-weight: 500; }
+        .legend-color { width: 14px; height: 14px; border: 1px solid rgba(0,0,0,0.08); margin-right: 10px; border-radius: 4px; flex-shrink: 0; }
+        .legend-icon { width: 24px; height: 14px; margin-right: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+        .overlay-ui { position: absolute; bottom: 24px; left: 24px; pointer-events: none; display: flex; flex-direction: column; gap: 12px; z-index: 50; }
+        .hud-panel { background: var(--primary); color: white; padding: 18px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border-left: 4px solid var(--accent); min-width: 320px; pointer-events: none; }
+        .hud-coords { font-family: var(--font-mono); font-size: 16px; font-weight: bold; margin-bottom: 6px; color: var(--accent); letter-spacing: 1px; }
+        .hud-details { font-size: 12px; line-height: 1.6; color: #cfd8dc; }
+        .hud-accent { color: #fff; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .controls-hint { background: rgba(255, 255, 255, 0.85); padding: 5px 14px; border-radius: 20px; font-size: 10px; color: #555; align-self: flex-start; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+        /* --- ИНСПЕКТОР (ПРАВАЯ ПАНЕЛЬ) --- */
+        .inspector {
+            width: 360px;
+            background: #ffffff;
+            border-left: 1px solid var(--border);
+            display: flex; flex-direction: column;
+            z-index: 95;
+            box-shadow: -10px 0 30px rgba(0,0,0,0.02);
+        }
+        .inspector-header { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+        .inspector-header h3 { margin: 0; font-size: 13px; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .inspector-content { padding: 24px; overflow-y: auto; flex: 1; }
+
+        .input-group { margin-bottom: 18px; }
+        .input-group label { display: block; margin-bottom: 8px; font-weight: 700; color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .brush-section {
+            background: #f8f9fa; padding: 16px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #edf2f7;
+        }
+
+        .row-2-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .separator {
+            font-size: 10px; color: var(--accent); font-weight: 800; margin: 24px 0 16px;
+            text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 10px;
+        }
+        .separator::after { content: ''; flex: 1; height: 1px; background: rgba(230, 126, 34, 0.15); }
+
+        input, select, textarea {
+            width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px;
+            background: #f8f9fa; font-family: var(--font-ui); font-size: 13px; transition: 0.2s;
+        }
+        input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; background: white; box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.08); }
+
+        .checkbox-container { display: flex; align-items: center; cursor: pointer; padding: 6px 0; margin-bottom: 4px; transition: 0.2s; border-radius: 8px; }
+        .checkbox-container:hover { background: rgba(0,0,0,0.02); }
+        .checkbox-container input { width: 16px; height: 16px; margin-right: 12px; accent-color: var(--accent); }
+        .checkbox-container span { font-weight: 600; color: var(--primary); font-size: 12px; }
+
+        .primary-btn {
+            width: 100%; background: var(--primary); color: white; border: none; padding: 14px;
+            border-radius: 10px; font-weight: 700; cursor: pointer; margin-top: 10px; transition: 0.2s;
+            letter-spacing: 0.3px;
+        }
+        .primary-btn:hover { background: #1a252f; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+
+        /* --- ЛОГ --- */
+        .log-panel { height: 140px; border-top: 1px solid var(--border); background: #fdfdfd; display: flex; flex-direction: column; }
+        .log-header { padding: 8px 16px; font-size: 9px; font-weight: 800; color: #b0bec5; text-transform: uppercase; border-bottom: 1px solid #f1f1f1; letter-spacing: 1px; }
+        #system-log { flex: 1; overflow-y: auto; padding: 10px 16px; font-family: var(--font-mono); font-size: 10px; color: #7f8c8d; line-height: 1.5; }
+
+        /* --- МОДАЛЬНОЕ ОКНО --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-window { background: white; padding: 32px; border-radius: 20px; width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes modalIn { from { opacity: 0; transform: translateY(10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .modal-title { margin: 0 0 24px 0; color: var(--primary); font-size: 20px; font-weight: 800; border-bottom: 3px solid var(--accent); padding-bottom: 12px; width: fit-content; }
+        .modal-group { margin-bottom: 16px; }
+        .modal-label { display: block; margin-bottom: 6px; font-size: 10px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; }
+        .modal-btn { width: 100%; padding: 14px; font-weight: 700; cursor: pointer; border-radius: 10px; border: none; margin-top: 8px; font-size: 13px; transition: 0.2s; }
+        .btn-create { background: var(--primary); color: white; }
+        .btn-create:hover { background: #1a252f; }
+        .btn-cancel { background: #f0f0f2; color: var(--text-dim); }
+
+        .range-container { display: flex; align-items: center; gap: 12px; }
+        .range-container span { min-width: 24px; font-weight: 800; color: var(--accent); font-size: 14px; }
+
+        .icon-village { width: 16px; height: 10px; background: #2c2c2c; border: 1px solid white; box-shadow: 0 0 0 1px #2c2c2c; }
+        .line-asphalt { width: 100%; height: 6px; border-top: 1px solid #000; border-bottom: 1px solid #000; background: #fff; }
+        .line-dirt { width: 100%; height: 2px; background: #333; }
+        .line-trail { width: 100%; height: 2px; border-top: 1px dashed rgba(0,0,0,0.5); }
+
+        /* Скроллбары */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #cbd5e0; }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <header class="toolbar">
+        <div class="brand">
+            <span class="brand-icon">⬢</span> MapEditor <span class="version">v.1.1.0</span>
+        </div>
+
+        <div class="toolbar-center">
+            <div class="map-modes">
+                <button class="mode-btn active" onclick="mapEditor.setMapMode('biome')" id="mode-biome" data-i18n="mode_biome">Landscape</button>
+                <button class="mode-btn" onclick="mapEditor.setMapMode('soil')" id="mode-soil" data-i18n="mode_soil">Soils</button>
+                <button class="mode-btn" onclick="mapEditor.setMapMode('water')" id="mode-water" data-i18n="mode_water">Hydro</button>
+                <button class="mode-btn" onclick="mapEditor.setMapMode('height')" id="mode-height" data-i18n="mode_height">Heights</button>
+            </div>
+
+            <div class="tools-panel" id="toolsPanel"></div>
+        </div>
+
+        <div class="system-actions">
+            <button onclick="mapEditor.toggleLang()" id="btn-lang">RU</button>
+            <button class="create-btn" onclick="mapEditor.showCreateDialog()" data-i18n="btn_create">New Map</button>
+            <button onclick="mapEditor.exportMap()" title="Export JSON">💾</button>
+            <button onclick="mapEditor.importMap()" title="Import JSON">📂</button>
+            <input type="file" id="fileInput" style="display:none">
+        </div>
+    </header>
+
+    <div class="main-workspace">
+        <div class="canvas-wrapper">
+            <canvas id="mapCanvas" tabindex="1"></canvas>
+
+            <div class="legend-container">
+                <div id="map-legend" class="legend-panel floating-panel"></div>
+                <div id="infra-legend" class="legend-panel floating-panel">
+                    <div class="legend-title" data-i18n="legend_infra">Infrastructure</div>
+                    <div class="legend-item"><div class="legend-icon"><div class="icon-village"></div></div><span data-i18n="leg_village">Village</span></div>
+                    <div class="legend-item"><div class="legend-icon"><div class="line-asphalt"></div></div><span data-i18n="leg_asphalt">Asphalt Road</span></div>
+                    <div class="legend-item"><div class="legend-icon"><div class="line-dirt"></div></div><span data-i18n="leg_dirt">Dirt Road</span></div>
+                    <div class="legend-item"><div class="legend-icon"><div class="line-trail"></div></div><span data-i18n="leg_trail">Trail</span></div>
+                </div>
+            </div>
+
+            <div class="overlay-ui">
+                <div class="hud-panel floating-panel">
+                    <div class="hud-coords" id="hud-coords-val">Q: 0 | R: 0</div>
+                    <div class="hud-details" id="hud-details-val">Initializing terminal...</div>
+                </div>
+                <div class="controls-hint" data-i18n="controls_hint">WASD — Camera | SCROLL — Zoom | LMB — Action</div>
+            </div>
+        </div>
+
+        <aside class="inspector">
+            <div class="inspector-header">
+                <h3 data-i18n="inspector_title">Hex Terminal</h3>
+            </div>
+
+            <div class="inspector-content">
+                <div class="brush-section" id="brush-container" style="display: none;">
+                    <div class="input-group">
+                        <label data-i18n="brush_radius">Impact Radius</label>
+                        <div class="range-container">
+                            <input type="range" min="0" max="5" value="0" step="1" id="brush-slider">
+                            <span id="brush-val">1</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="hex-params-group" style="display: none;">
+                    <div class="input-group">
+                        <label data-i18n="lbl_elevation">Elevation (m)</label>
+                        <input type="number" id="inp-height" step="0.5" value="75.0">
+                    </div>
+
+                    <div class="input-group">
+                        <label data-i18n="lbl_soil">Geological Composition</label>
+                        <select id="inp-soil"></select>
+                    </div>
+
+                    <div id="infrastructure-section">
+                        <div class="separator" data-i18n="sep_objects">Object Layers</div>
+                        <div class="input-group">
+                            <label class="checkbox-container"><input type="checkbox" id="inp-land-cb" onchange="mapEditor.onInfrastructureChange('land')"><span data-i18n="cb_land">Land Cover</span></label>
+                            <label class="checkbox-container"><input type="checkbox" id="inp-water-cb" onchange="mapEditor.onInfrastructureChange('water')"><span data-i18n="cb_water">Water Object</span></label>
+                        </div>
+                    </div>
+
+                    <div id="land-sub-section" style="display: none;">
+                        <div class="separator" data-i18n="sep_land_details">Land details</div>
+                        <div class="input-group">
+                            <label data-i18n="lbl_biome">Primary Biome</label>
+                            <select id="inp-biome"></select>
+                        </div>
+                        <div class="input-group">
+                            <label class="checkbox-container"><input type="checkbox" id="inp-village-cb" onchange="mapEditor.onInfrastructureChange('village')"><span data-i18n="cb_village">Settlement</span></label>
+                            <label class="checkbox-container"><input type="checkbox" id="inp-road-cb" onchange="mapEditor.onInfrastructureChange('road')"><span data-i18n="cb_road">Transport Link</span></label>
+                        </div>
+                        <div id="road-type-container" style="display: none; margin-top: 10px;">
+                            <label data-i18n="lbl_road_type">Pavement classification</label>
+                            <select id="inp-road-type"></select>
+                        </div>
+                    </div>
+
+                    <div id="hydrology-section" style="display: none;">
+                        <div class="separator" data-i18n="sep_hydro">Hydrological data</div>
+                        <div class="input-group">
+                            <label data-i18n="lbl_water_type">Hydrological Object</label>
+                            <select id="inp-water-type" onchange="mapEditor.onWaterTypeChange()"></select>
+                        </div>
+                        <div class="input-group" id="flow-auto-container" style="display: none;">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="inp-flow-auto" checked>
+                                <span data-i18n="cb_flow_auto">Auto-flow Routing</span>
+                            </label>
+                        </div>
+                        <div class="row-2-col">
+                            <div class="input-group"><label data-i18n="lbl_flow_dir">Azimuth (°)</label><input type="number" id="inp-flow-dir" min="0" max="360" value="0"></div>
+                            <div class="input-group"><label data-i18n="lbl_flow_speed">Flow Rate (m/s)</label><input type="number" id="inp-flow-speed" step="0.1" value="0.0"></div>
+                        </div>
+                    </div>
+
+                    <div class="input-group" style="margin-top: 20px;">
+                        <label data-i18n="lbl_comment">Administrative Notes</label>
+                        <textarea id="inp-comment" rows="3" placeholder="..."></textarea>
+                    </div>
+
+                    <button class="primary-btn" onclick="mapEditor.applyChanges()" data-i18n="btn_apply">Commit Configuration</button>
+                </div>
+            </div>
+
+            <div class="log-panel">
+                <div class="log-header" data-i18n="log_title">System Status Journal</div>
+                <div id="system-log"></div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<script>
+    /** --- JS LOGIC (CORE) --- **/
+
+    const CFG = { hexSize: 30, canvasColor: '#e0e0da', zoomStep: 0.1, minZoom: 0.15, maxZoom: 4.0, scrollSpeed: 10.0 };
+
+    const I18N = {
+        ru: {
+            title: "MapEditor",
+            mode_biome: "Ландшафт", mode_soil: "Почвы", mode_water: "Гидро", mode_height: "Высоты",
+            btn_create: "Новая карта", legend_infra: "Инфраструктура", leg_village: "Деревня",
+            leg_asphalt: "Асфальт", leg_dirt: "Грунт", leg_trail: "Тропа", leg_river: "Река",
+            controls_hint: "WASD — Камера | СКРОЛЛ — Зум | ЛКМ — Действие",
+            inspector_title: "Инженерный терминал", brush_radius: "Радиус кисти",
+            lbl_elevation: "Высота (м)", lbl_soil: "Геология", sep_objects: "Слои объектов",
+            cb_land: "Суша", cb_water: "Вода", cb_village: "Поселение", cb_road: "Дорога",
+            lbl_biome: "Тип биома", sep_land_details: "Параметры суши", sep_hydro: "Гидрология", lbl_water_type: "Тип водоема",
+            cb_flow_auto: "Авто-течение", lbl_flow_dir: "Азимут (°)", lbl_flow_speed: "Скорость (м/с)",
+            lbl_road_type: "Тип дороги", opt_asphalt: "Асфальт", opt_dirt: "Грунт", opt_trail: "Тропа",
+            lbl_comment: "Заметки", btn_apply: "Применить", log_title: "Журнал системы",
+            hud_waiting: "Готов...", hud_outside: "Вне сетки.",
+            leg_alt: "Высоты", tool_cursor: "Курсор", tool_paint: "Кисть", tool_add: "Добавить", tool_delete: "Удалить",
+            modal_title: "Новый мир", modal_shape: "Форма", modal_hex: "Гексагон", modal_rect: "Прямоугольник", modal_circle: "Круг",
+            modal_radius: "Радиус", modal_width: "Ширина", modal_height: "Высота", modal_gen: "Создать", modal_cancel: "Отмена"
+        },
+        en: {
+            title: "MapEditor",
+            mode_biome: "Landscape", mode_soil: "Soils", mode_water: "Hydro", mode_height: "Heights",
+            btn_create: "New Map", legend_infra: "Infrastructure", leg_village: "Village",
+            leg_asphalt: "Asphalt Road", leg_dirt: "Dirt Road", leg_trail: "Trail", leg_river: "Riverbed",
+            controls_hint: "WASD — Camera | SCROLL — Zoom | LMB — Action",
+            inspector_title: "Hex Terminal", brush_radius: "Impact radius",
+            lbl_elevation: "Elevation (m)", lbl_soil: "Geological composition", sep_objects: "Object Layers",
+            cb_land: "Land", cb_water: "Water Body", cb_village: "Village", cb_road: "Road",
+            lbl_biome: "Biome type", sep_land_details: "Land details", sep_hydro: "Hydrological data", lbl_water_type: "Water type",
+            cb_flow_auto: "Auto-routing", lbl_flow_dir: "Flow Azimuth (°)", lbl_flow_speed: "Flow Rate (m/s)",
+            lbl_road_type: "Pavement Class", opt_asphalt: "Asphalt", opt_dirt: "Dirt Road", opt_trail: "Trail",
+            lbl_comment: "Admin Notes", btn_apply: "Commit Configuration", log_title: "Status Journal",
+            hud_waiting: "Ready...", hud_outside: "Outside coverage.",
+            leg_alt: "Altitudes", tool_cursor: "Cursor", tool_paint: "Paint", tool_add: "Add Hex", tool_delete: "Delete Hex",
+            modal_title: "World Config", modal_shape: "Shape", modal_hex: "Hexagon", modal_rect: "Rectangle", modal_circle: "Circle",
+            modal_radius: "Radius", modal_width: "Width", modal_height: "Height", modal_gen: "Generate", modal_cancel: "Cancel"
+        }
+    };
+
+    const SOIL_NAMES = { 'sand': {ru:'Песок', en:'Sand'}, 'sandy_loam': {ru:'Супесь', en:'Sandy loam'}, 'loam': {ru:'Суглинок', en:'Loam'}, 'clay': {ru:'Глина', en:'Clay'}, 'chernozem': {ru:'Чернозем', en:'Chernozem'}, 'peat': {ru:'Торф', en:'Peat'}, 'rocky': {ru:'Камень', en:'Rocky'} };
+    const SOIL_COLORS = { 'sand': '#ffe082', 'sandy_loam': '#ffd54f', 'loam': '#d7ccc8', 'clay': '#bcaaa4', 'chernozem': '#3e2723', 'peat': '#5d4037', 'rocky': '#9e9e9e' };
+
+    const BIOME_NAMES = {
+        'grass_meadow': {ru:'Луг разнотравный', en:'Grass meadow'},
+        'pasture': {ru:'Пастбище', en:'Pasture'},
+        'field': {ru:'Поле (Пашня)', en:'Cultivated field'},
+        'pine_forest': {ru:'Сосновый бор', en:'Pine forest'},
+        'spruce_forest': {ru:'Ельник', en:'Spruce forest'},
+        'fir_forest': {ru:'Пихтарник', en:'Fir forest'},
+        'larch_forest': {ru:'Лиственничник', en:'Larch forest'},
+        'birch_forest': {ru:'Березняк', en:'Birch forest'},
+        'aspen_forest': {ru:'Осинник', en:'Aspen forest'},
+        'oak_forest': {ru:'Дубрава', en:'Oak forest'},
+        'maple_forest': {ru:'Кленовник', en:'Maple forest'},
+        'mixed_forest_light': {ru:'Смешанный (светлый)', en:'Mixed forest (light)'},
+        'mixed_forest_dense': {ru:'Смешанный (густой)', en:'Mixed forest (dense)'},
+        'secondary_forest': {ru:'Вторичный лес', en:'Secondary forest'},
+        'young_forest': {ru:'Молодняк', en:'Young growth'},
+        'forest_edge': {ru:'Опушка', en:'Forest edge'}
+    };
+
+    const BIOME_COLORS = {
+        'grass_meadow': '#a8e094', 'pasture': '#c5e1a5', 'field': '#fff59d', 'pine_forest': '#2d5a27', 'spruce_forest': '#1b4332', 'fir_forest': '#004d40', 'larch_forest': '#fbc02d',
+        'birch_forest': '#81c784', 'aspen_forest': '#a5d6a7', 'oak_forest': '#388e3c', 'maple_forest': '#ff8a65', 'mixed_forest_light': '#66bb6a', 'mixed_forest_dense': '#43a047', 'secondary_forest': '#9ccc65', 'young_forest': '#c5e1a5', 'forest_edge': '#dcedc8', 'default': '#ffffff'
+    };
+
+    const ROAD_TYPES = { 'asphalt': {ru: 'Асфальтированная', en: 'Asphalt'}, 'dirt': {ru: 'Грунтовая', en: 'Dirt Road'}, 'trail': {ru: 'Тропа', en: 'Trail'} };
+    const WATER_NAMES = { 'river': {ru:'Река', en:'River'}, 'lake': {ru:'Озеро', en:'Lake'}, 'swamp': {ru:'Заводь', en:'Backwater'}, 'floodplain': {ru:'Пойма', en:'Floodplain'} };
+    const WATER_COLORS = { 'none': 'rgba(0,0,0,0.05)', 'river': '#03a9f4', 'lake': '#0288d1', 'swamp': '#009688', 'floodplain': '#4fc3f7' };
+    const HEIGHT_SCALE = [{ threshold: 40, color: '#003020' }, { threshold: 60, color: '#1b4332' }, { threshold: 80, color: '#52b788' }, { threshold: 100, color: '#95d5b2' }, { threshold: 120, color: '#d8f3dc' }, { threshold: 140, color: '#f8f9fa' }, { threshold: Infinity, color: '#ffffff' }];
+
+    let mapData = {}; let selectedHexKey = null; let hoverHexKey = null; let camera = { x: 0, y: 0, zoom: 1.0 }; let isDragging = false; let lastMouse = { x: 0, y: 0 }; let dragThresholdPassed = false; let lastHexForChain = null; let brushRadius = 0; let currentMapMode = 'biome'; let currentLang = 'en';
+    const TOOLS = { CURSOR: 'cursor', PAINT: 'paint', ADD: 'add', DELETE: 'delete' };
+    let currentTool = TOOLS.CURSOR;
+    let canvas, ctx, inputs = {};
+
+    let keysPressed = {};
+    function moveCameraLoop() {
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+            requestAnimationFrame(moveCameraLoop);
+            return;
+        }
+        const s = (CFG.scrollSpeed / camera.zoom);
+        let moved = false;
+        if (keysPressed['KeyW'] || keysPressed['ArrowUp']) { camera.y += s; moved = true; }
+        if (keysPressed['KeyS'] || keysPressed['ArrowDown']) { camera.y -= s; moved = true; }
+        if (keysPressed['KeyA'] || keysPressed['ArrowLeft']) { camera.x += s; moved = true; }
+        if (keysPressed['KeyD'] || keysPressed['ArrowRight']) { camera.x -= s; moved = true; }
+        if (moved) render();
+        requestAnimationFrame(moveCameraLoop);
+    }
+
+    function screenToWorld(sx, sy) { return { x: (sx - canvas.width / 2) / camera.zoom - camera.x, y: (sy - canvas.height / 2) / camera.zoom - camera.y }; }
+    function hexToPixel(q, r) { return { x: CFG.hexSize * 3/2 * q, y: CFG.hexSize * Math.sqrt(3) * (r + q/2) }; }
+    function pixelToHex(x, y) { let q = (2/3 * x) / CFG.hexSize; let r = (-1/3 * x + Math.sqrt(3)/3 * y) / CFG.hexSize; return hexRound(q, r); }
+    function hexRound(q, r) { let s = -q - r; let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s); let q_diff = Math.abs(rq - q), r_diff = Math.abs(rr - r), s_diff = Math.abs(rs - s); if (q_diff > r_diff && q_diff > s_diff) rq = -rr - rs; else if (r_diff > s_diff) rr = -rq - rs; return { q: rq, r: rr }; }
+    const getKey = (q, r) => `${q},${r}`;
+    function createDefaultHex(q, r) { return { q, r, height: 75.0, soil: "loam", biome: "grass_meadow", water: { type: "none", flow: { direction: null, speed: 0.0 } }, roads: [], roadType: 'asphalt', village: null, comment: "" }; }
+    function getHexesInRange(centerQ, centerR, radius) { let res = []; for (let q = -radius; q <= radius; q++) { for (let r = Math.max(-radius, -q - radius); r <= Math.min(radius, -q + radius); r++) { res.push({ q: centerQ + q, r: centerR + r }); } } return res; }
+
+    function translateUI() {
+        const strings = I18N[currentLang];
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (strings[key]) el.textContent = strings[key];
+        });
+        document.getElementById('btn-lang').textContent = currentLang === 'en' ? 'RU' : 'EN';
+
+        const soilVal = inputs.soil.value, biomeVal = inputs.biome.value, waterVal = inputs.waterType.value, roadTVal = inputs.roadType.value;
+        inputs.soil.innerHTML = ''; inputs.biome.innerHTML = ''; inputs.waterType.innerHTML = ''; inputs.roadType.innerHTML = '';
+        const fillSelect = (el, data, current) => {
+            Object.keys(data).forEach(k => {
+                const opt = document.createElement('option'); opt.value = k; opt.textContent = data[k][currentLang];
+                el.appendChild(opt);
+            });
+            if (current) el.value = current;
+        };
+        fillSelect(inputs.soil, SOIL_NAMES, soilVal);
+        fillSelect(inputs.biome, BIOME_NAMES, biomeVal);
+        fillSelect(inputs.waterType, WATER_NAMES, waterVal);
+        fillSelect(inputs.roadType, ROAD_TYPES, roadTVal);
+        updateLegend();
+    }
+
+    function generateMap(p) {
+        mapData = {}; camera = { x: 0, y: 0, zoom: 0.9 };
+        if (p.shape === 'hex') { for (let q = -p.radius; q <= p.radius; q++) { for (let r = Math.max(-p.radius, -q - p.radius); r <= Math.min(p.radius, -q + p.radius); r++) { mapData[getKey(q, r)] = createDefaultHex(q, r); } } }
+        else if (p.shape === 'circle') { for (let q = -p.radius; q <= p.radius; q++) { for (let r = -p.radius; r <= p.radius; r++) { let c = hexToPixel(q, r); if (Math.sqrt(c.x**2 + c.y**2) <= p.radius * CFG.hexSize * 1.5) mapData[getKey(q, r)] = createDefaultHex(q, r); } } }
+        else if (p.shape === 'rect') { let oQ = Math.floor(p.w/2), oR = Math.floor(p.h/2); for (let col = 0; col < p.w; col++) { for (let row = 0; row < p.h; row++) { let q = col - oQ, r = row - Math.floor(col/2) - oR; mapData[getKey(q, r)] = createDefaultHex(q, r); } } }
+        window.mapEditor.setMapMode('biome'); render();
+    }
+
+    function updateLegend() {
+        const strings = I18N[currentLang];
+        const legend = document.getElementById('map-legend'); if (!legend) return; legend.innerHTML = '';
+        let src = {}, names = {}, title = '';
+        switch (currentMapMode) {
+            case 'biome': title = strings.mode_biome; src = BIOME_COLORS; names = BIOME_NAMES; break;
+            case 'soil': title = strings.mode_soil; src = SOIL_COLORS; names = SOIL_NAMES; break;
+            case 'water': title = strings.mode_water; src = WATER_COLORS; names = WATER_NAMES; break;
+            case 'height': title = strings.leg_alt; break;
+        }
+        const t = document.createElement('div'); t.className = 'legend-title'; t.innerText = title; legend.appendChild(t);
+        if (currentMapMode === 'height') {
+            HEIGHT_SCALE.forEach((l, i) => {
+                let prev = i > 0 ? HEIGHT_SCALE[i-1].threshold : 0;
+                let row = document.createElement('div'); row.className = 'legend-item';
+                row.innerHTML = `<span class="legend-color" style="background:${l.color};"></span><span>${prev}-${l.threshold} m</span>`;
+                legend.appendChild(row);
+            });
+        } else {
+            for (let k in src) {
+                if (k === 'default' || (currentMapMode === 'water' && k === 'none')) continue;
+                let row = document.createElement('div'); row.className = 'legend-item';
+                row.innerHTML = `<span class="legend-color" style="background:${src[k]};"></span><span>${names[k] ? names[k][currentLang] : k}</span>`;
+                legend.appendChild(row);
+            }
+        }
+    }
+
+    function render() {
+        if (!ctx) return; ctx.fillStyle = CFG.canvasColor; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.scale(camera.zoom, camera.zoom); ctx.translate(camera.x, camera.y);
+
+        ctx.save(); ctx.strokeStyle = 'rgba(0,0,0,0.03)'; ctx.lineWidth = 1;
+        let screenBounds = [screenToWorld(0, 0), screenToWorld(canvas.width, canvas.height)];
+        let qStart = Math.floor((2/3 * screenBounds[0].x) / CFG.hexSize) - 2, qEnd = Math.ceil((2/3 * screenBounds[1].x) / CFG.hexSize) + 2;
+        for (let q = qStart; q <= qEnd; q++) {
+            let rStart = Math.floor((screenBounds[0].y / (CFG.hexSize * Math.sqrt(3))) - q/2) - 2, rEnd = Math.ceil((screenBounds[1].y / (CFG.hexSize * Math.sqrt(3))) - q/2) + 2;
+            for (let r = Math.min(rStart, rEnd); r <= Math.max(rStart, rEnd); r++) {
+                let c = hexToPixel(q, r); drawHexPath(ctx, c.x, c.y); ctx.stroke();
+            }
+        }
+        ctx.restore();
+
+        for (let key in mapData) { let h = mapData[key]; let c = hexToPixel(h.q, h.r); drawHexCell(ctx, c.x, c.y, h); }
+        if (hoverHexKey) {
+            let p = hoverHexKey.split(',').map(Number);
+            let rad = (currentTool !== TOOLS.CURSOR) ? brushRadius : 0;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 3;
+            getHexesInRange(p[0], p[1], rad).forEach(h => { let c = hexToPixel(h.q, h.r); drawHexPath(ctx, c.x, c.y); ctx.stroke(); });
+        }
+        ctx.restore();
+    }
+
+    function drawHexCell(ctx, x, y, hex) {
+        drawHexPath(ctx, x, y); let fill = '#fff';
+        switch (currentMapMode) {
+            case 'biome': fill = BIOME_COLORS[hex.biome] || '#fff'; if (hex.water.type !== 'none') fill = WATER_COLORS[hex.water.type]; break;
+            case 'soil': fill = SOIL_COLORS[hex.soil] || '#ccc'; break;
+            case 'water': fill = WATER_COLORS[hex.water.type] || '#fff'; break;
+            case 'height': fill = (function(h){ for(let l of HEIGHT_SCALE) if(h<=l.threshold) return l.color; return "#fff"; })(hex.height); break;
+        }
+        ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 0.5; ctx.stroke();
+
+        if (hex.roads && hex.roads.length > 0) {
+            ctx.save(); ctx.lineCap = 'butt';
+            hex.roads.forEach(dir => {
+                let a = (Math.PI / 3) * dir + (Math.PI / 6);
+                let tx = x + (CFG.hexSize * 0.86) * Math.cos(a), ty = y + (CFG.hexSize * 0.86) * Math.sin(a);
+                if (hex.roadType === 'asphalt') {
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+                } else if (hex.roadType === 'dirt') {
+                    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+                } else if (hex.roadType === 'trail') {
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            });
+            ctx.restore();
+        }
+
+        // POST-SOVIET HOUSE (SOLID GOST BOX)
+        if (hex.village === 'residential') {
+            ctx.save();
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(x - 9, y - 6, 18, 12);
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(x - 9, y - 6, 18, 12);
+            ctx.restore();
+        }
+        if (camera.zoom > 0.6) {
+            if (currentMapMode === 'height') {
+                ctx.fillStyle = (hex.height > 120 || hex.height < 60) ? '#fff' : '#000'; ctx.font = 'bold 9px sans-serif';
+                ctx.textAlign = 'center'; ctx.fillText(Math.round(hex.height), x, y + 4);
+            }
+            if ((currentMapMode === 'water' || currentMapMode === 'biome') && hex.water.flow.direction !== null && hex.water.type !== 'none') {
+                let a = (hex.water.flow.direction * Math.PI) / 180;
+                let x2 = x + 12 * Math.cos(a), y2 = y + 12 * Math.sin(a);
+                ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.strokeStyle = '#0277bd'; ctx.lineWidth = 2.5; ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - 5 * Math.cos(a - 0.5), y2 - 5 * Math.sin(a - 0.5)); ctx.lineTo(x2 - 5 * Math.cos(a + 0.5), y2 - 5 * Math.sin(a + 0.5)); ctx.closePath(); ctx.fillStyle = '#0277bd'; ctx.fill();
+            }
+        }
+    }
+
+    function drawHexPath(ctx, x, y) { ctx.beginPath(); for (let i = 0; i < 6; i++) { let a = (Math.PI / 3) * i; ctx.lineTo(x + CFG.hexSize * Math.cos(a), y + CFG.hexSize * Math.sin(a)); } ctx.closePath(); }
+
+    window.mapEditor = {
+        toggleLang: () => { currentLang = (currentLang === 'en' ? 'ru' : 'en'); translateUI(); },
+        setMapMode: (m) => { currentMapMode = m; document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.id === `mode-${m}`)); updateLegend(); render(); },
+        showCreateDialog: () => showNewMapDialog(),
+        onWaterTypeChange: () => { const isRiver = inputs.waterType.value === 'river'; document.getElementById('flow-auto-container').style.display = isRiver ? 'block' : 'none'; },
+        onInfrastructureChange: (source) => {
+            const lCb = document.getElementById('inp-land-cb'), wCb = document.getElementById('inp-water-cb'), rCb = document.getElementById('inp-road-cb'), vCb = document.getElementById('inp-village-cb');
+            if (source === 'water') { if (wCb.checked) { lCb.checked = false; rCb.checked = false; vCb.checked = false; } else { lCb.checked = true; } }
+            else if (source === 'land') { if (!lCb.checked) { wCb.checked = true; } else { wCb.checked = false; } }
+            else if (source === 'road' || source === 'village') { if (rCb.checked || vCb.checked) { lCb.checked = true; wCb.checked = false; } }
+            document.getElementById('hydrology-section').style.display = wCb.checked ? 'block' : 'none';
+            document.getElementById('land-sub-section').style.display = lCb.checked ? 'block' : 'none';
+            document.getElementById('road-type-container').style.display = rCb.checked ? 'block' : 'none';
+            mapEditor.onWaterTypeChange();
+        },
+        exportMap: () => { let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(mapData, null, 2)], {type: "application/json"})); a.download = "map_v1.json"; a.click(); },
+        importMap: () => document.getElementById('fileInput').click(),
+        applyChanges: () => { if (selectedHexKey && mapData[selectedHexKey]) { paintHex(selectedHexKey); render(); } }
+    };
+
+    window.onload = function() {
+        canvas = document.getElementById('mapCanvas'); ctx = canvas.getContext('2d');
+        const wrapper = document.querySelector('.canvas-wrapper');
+        inputs = {
+            height: document.getElementById('inp-height'), soil: document.getElementById('inp-soil'), biome: document.getElementById('inp-biome'),
+            waterType: document.getElementById('inp-water-type'), flowDir: document.getElementById('inp-flow-dir'), flowSpeed: document.getElementById('inp-flow-speed'),
+            villageCheckbox: document.getElementById('inp-village-cb'), roadCheckbox: document.getElementById('inp-road-cb'), roadType: document.getElementById('inp-road-type'),
+            flowAuto: document.getElementById('inp-flow-auto'), comment: document.getElementById('inp-comment'),
+            landCheckbox: document.getElementById('inp-land-cb'), waterCheckbox: document.getElementById('inp-water-cb')
+        };
+
+        window.addEventListener('keydown', (e) => { keysPressed[e.code] = true; });
+        window.addEventListener('keyup', (e) => { keysPressed[e.code] = false; });
+        requestAnimationFrame(moveCameraLoop);
+
+        canvas.addEventListener('mousedown', (e) => {
+            if(e.button !== 0) return; window.focus(); isDragging = true; dragThresholdPassed = false;
+            lastMouse = {x: e.clientX, y: e.clientY}; let rect = canvas.getBoundingClientRect();
+            let w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top); let h = pixelToHex(w.x, w.y);
+            lastHexForChain = mapData[getKey(h.q, h.r)];
+        });
+        window.addEventListener('mousemove', (e) => {
+            let rect = canvas.getBoundingClientRect(); let worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+            let h = pixelToHex(worldPos.x, worldPos.y); let key = getKey(h.q, h.r);
+            if (hoverHexKey !== key) { hoverHexKey = key; updateHud(h.q, h.r, mapData[key]); render(); }
+            if (isDragging) {
+                let dx = e.clientX - lastMouse.x, dy = e.clientY - lastMouse.y;
+                if (currentTool !== TOOLS.CURSOR) {
+                    dragThresholdPassed = true;
+                    if (currentTool === TOOLS.PAINT) {
+                        getHexesInRange(h.q, h.r, brushRadius).forEach(t => {
+                            let k = getKey(t.q, t.r); let targetHex = mapData[k];
+                            if (targetHex) {
+                                if (lastHexForChain && k !== getKey(lastHexForChain.q, lastHexForChain.r)) {
+                                    let dq = t.q - lastHexForChain.q, dr = t.r - lastHexForChain.r; let dir = -1;
+                                    if (dq === 1 && dr === 0) dir = 0; else if (dq === 0 && dr === 1) dir = 1; else if (dq === -1 && dr === 1) dir = 2; else if (dq === -1 && dr === 0) dir = 3; else if (dq === 0 && dr === -1) dir = 4; else if (dq === 1 && dr === -1) dir = 5;
+                                    if (dir !== -1) {
+                                        if (inputs.roadCheckbox.checked && inputs.landCheckbox.checked) { if (!lastHexForChain.roads.includes(dir)) lastHexForChain.roads.push(dir); let opp = (dir + 3) % 6; if (!targetHex.roads.includes(opp)) targetHex.roads.push(opp); }
+                                        if (inputs.waterCheckbox.checked && inputs.waterType.value === 'river') {
+                                            lastHexForChain.water.type = 'river'; targetHex.water.type = 'river';
+                                            if (inputs.flowAuto.checked) { let p1 = hexToPixel(lastHexForChain.q, lastHexForChain.r), p2 = hexToPixel(t.q, t.r); lastHexForChain.water.flow.direction = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI; lastHexForChain.water.flow.speed = 1.0; }
+                                        }
+                                        lastHexForChain = targetHex;
+                                    }
+                                }
+                                paintHex(k, (Math.abs(dx) > 1 || Math.abs(dy) > 1) ? Math.atan2(dy, dx) * 180 / Math.PI : null);
+                            }
+                        });
+                    } else processHexAction(h.q, h.r);
+                } else if (Math.abs(dx) > 2 || Math.abs(dy) > 2) { dragThresholdPassed = true; camera.x += dx / camera.zoom; camera.y += dy / camera.zoom; render(); }
+                lastMouse = { x: e.clientX, y: e.clientY };
+            }
+        });
+        window.addEventListener('mouseup', (e) => {
+            isDragging = false; if (!dragThresholdPassed && e.target === canvas) {
+                let rect = canvas.getBoundingClientRect(); let worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+                let h = pixelToHex(worldPos.x, worldPos.y); let key = getKey(h.q, h.r);
+                if (currentTool === TOOLS.CURSOR) {
+                    if (mapData[key]) {
+                        selectedHexKey = key; let hex = mapData[key];
+                        inputs.height.value = hex.height; inputs.soil.value = hex.soil; inputs.biome.value = hex.biome;
+                        inputs.waterType.value = hex.water.type !== 'none' ? hex.water.type : 'river'; inputs.waterCheckbox.checked = hex.water.type !== 'none';
+                        inputs.landCheckbox.checked = !inputs.waterCheckbox.checked; inputs.flowDir.value = hex.water.flow.direction ?? '';
+                        inputs.flowSpeed.value = hex.water.flow.speed ?? ''; inputs.villageCheckbox.checked = hex.village === 'residential';
+                        inputs.roadCheckbox.checked = hex.roads.length > 0; inputs.roadType.value = hex.roadType || 'asphalt';
+                        mapEditor.onInfrastructureChange(); translateUI(); inputs.comment.value = hex.comment;
+                    } else selectedHexKey = null; render();
+                } else processHexAction(h.q, h.r);
+            }
+        });
+        canvas.addEventListener('wheel', (e) => { e.preventDefault(); camera.zoom = Math.max(CFG.minZoom, Math.min(CFG.maxZoom, camera.zoom - Math.sign(e.deltaY) * CFG.zoomStep)); render(); }, { passive: false });
+        new ResizeObserver(() => { canvas.width = wrapper.clientWidth; canvas.height = wrapper.clientHeight; render(); }).observe(wrapper);
+
+        const tools = [{ id: TOOLS.CURSOR, label_key: 'tool_cursor', icon: '👆' }, { id: TOOLS.PAINT, label_key: 'tool_paint', icon: '🎨' }, { id: TOOLS.ADD, label_key: 'tool_add', icon: '➕' }, { id: TOOLS.DELETE, label_key: 'tool_delete', icon: '❌' }];
+        tools.forEach(m => {
+            let btn = document.createElement('button'); btn.innerHTML = `<span>${m.icon}</span> <span data-i18n="${m.label_key}"></span>`;
+            btn.className = 'tool-btn'; btn.id = `btn-tool-${m.id}`; btn.onclick = () => setTool(m.id);
+            document.getElementById('toolsPanel').appendChild(btn);
+        });
+        document.getElementById('brush-slider').oninput = function() { brushRadius = parseInt(this.value); document.getElementById('brush-val').innerText = brushRadius + 1; render(); };
+        document.getElementById('fileInput').onchange = (e) => {
+            let reader = new FileReader(); reader.onload = (ev) => { try { mapData = JSON.parse(ev.target.result); render(); log("Map imported successfully."); } catch(e) { log("Import error!", "error"); } };
+            reader.readAsText(e.target.files[0]);
+        };
+
+        generateMap({ shape: 'hex', radius: 10 });
+        translateUI(); setTool(TOOLS.CURSOR);
+    };
+
+    function setTool(t) {
+        currentTool = t; Object.values(TOOLS).forEach(id => { let el = document.getElementById(`btn-tool-${id}`); if(el) el.classList.toggle('active', id === t); });
+        document.getElementById('brush-container').style.display = (t === TOOLS.CURSOR) ? 'none' : 'block';
+        const hideParams = (t === TOOLS.CURSOR || t === TOOLS.ADD || t === TOOLS.DELETE);
+        document.getElementById('hex-params-group').style.display = hideParams ? 'none' : 'block';
+        render();
+    }
+
+    function processHexAction(cq, cr) {
+        let rad = (currentTool !== TOOLS.CURSOR) ? brushRadius : 0;
+        getHexesInRange(cq, cr, rad).forEach(t => {
+            let key = getKey(t.q, t.r);
+            if (currentTool === TOOLS.ADD && !mapData[key]) mapData[key] = createDefaultHex(t.q, t.r);
+            else if (currentTool === TOOLS.DELETE && mapData[key]) { delete mapData[key]; if (selectedHexKey === key) selectedHexKey = null; }
+            else if (currentTool === TOOLS.PAINT && mapData[key]) paintHex(key);
+        }); render();
+    }
+
+    function paintHex(key, overrideAngle = null) {
+        const h = mapData[key]; if (!h) return; h.height = parseFloat(inputs.height.value); h.soil = inputs.soil.value;
+        if (inputs.landCheckbox.checked) { h.biome = inputs.biome.value; h.water.type = 'none'; h.village = inputs.villageCheckbox.checked ? 'residential' : null; if (!inputs.roadCheckbox.checked) h.roads = []; else h.roadType = inputs.roadType.value; }
+        else if (inputs.waterCheckbox.checked) { h.water.type = inputs.waterType.value; h.village = null; h.roads = []; if (h.water.type === 'river' && inputs.flowAuto.checked && overrideAngle !== null) { h.water.flow.direction = overrideAngle; h.water.flow.speed = 1.0; } }
+    }
+
+    function updateHud(q, r, hex) {
+        const strings = I18N[currentLang]; const c = document.getElementById('hud-coords-val'), d = document.getElementById('hud-details-val');
+        c.innerHTML = `Q: <span class="hud-accent">${q}</span> | R: <span class="hud-accent">${r}</span>`;
+        if (hex) {
+            const biome = BIOME_NAMES[hex.biome] ? BIOME_NAMES[hex.biome][currentLang] : "—";
+            const waterLabel = hex.water.type !== 'none' ? WATER_NAMES[hex.water.type][currentLang] : (currentLang === 'ru' ? 'Суша' : 'Land');
+            d.innerHTML = `Biome: <span class="hud-accent">${biome}</span> | Elev: <span class="hud-accent">${hex.height}m</span><br>Water: <span class="hud-accent">${waterLabel}</span>`;
+        } else { d.innerHTML = strings.hud_outside; }
+    }
+
+    function log(m, t='info') { const l = document.getElementById('system-log'); if (!l) return; let line = document.createElement('div'); line.textContent = `[${new Date().toLocaleTimeString()}] ${m}`; l.appendChild(line); l.scrollTop = l.scrollHeight; }
+
+    function showNewMapDialog() {
+        const strings = I18N[currentLang]; const old = document.getElementById('new-map-modal'); if (old) old.remove();
+        const overlay = document.createElement('div'); overlay.id = 'new-map-modal'; overlay.className = 'modal-overlay';
+        const modal = document.createElement('div'); modal.className = 'modal-window';
+        modal.innerHTML = `
+            <h2 class="modal-title">${strings.modal_title}</h2>
+            <div class="modal-group"><label class="modal-label">${strings.modal_shape}</label><select id="map-shape"><option value="hex">${strings.modal_hex}</option><option value="rect">${strings.modal_rect}</option><option value="circle">${strings.modal_circle}</option></select></div>
+            <div id="param-radius" class="modal-group"><label class="modal-label">${strings.modal_radius}</label><input type="number" id="map-radius" value="12"></div>
+            <div id="param-rect" class="modal-group" style="display:none;"><label class="modal-label">${strings.modal_width} / ${strings.modal_height}</label><div style="display:flex; gap:8px;"><input type="number" id="map-width" value="20"><input type="number" id="map-height" value="15"></div></div>
+            <button id="btn-create-map" class="modal-btn btn-create">${strings.modal_gen}</button>
+            <button id="btn-cancel-map" class="modal-btn btn-cancel">${strings.modal_cancel}</button>`;
+        overlay.appendChild(modal); document.body.appendChild(overlay);
+        const sel = document.getElementById('map-shape'), rDiv = document.getElementById('param-radius'), reDiv = document.getElementById('param-rect');
+        sel.onchange = () => { let isRect = sel.value === 'rect'; rDiv.style.display = isRect ? 'none' : 'block'; reDiv.style.display = isRect ? 'block' : 'none'; };
+        document.getElementById('btn-create-map').onclick = () => { generateMap({ shape: sel.value, radius: parseInt(document.getElementById('map-radius').value) || 10, w: parseInt(document.getElementById('map-width').value) || 20, h: parseInt(document.getElementById('map-height').value) || 15 }); overlay.remove(); };
+        document.getElementById('btn-cancel-map').onclick = () => overlay.remove();
+    }
+</script>
+</body>
+</html>
